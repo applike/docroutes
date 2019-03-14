@@ -1,0 +1,59 @@
+{
+  "name": "routes",
+  "version": "0.0.1",
+  "scripts": {
+    "precommit": "lint-staged",
+    "build": "npm run build-ts && npm run lint-ts",
+    "build-ts": "tsc",
+    "lint-ts": "tslint -c tslint.json -p . -t stylish --force",
+    "lint-ts-check": "tslint -c tslint.json -p . -t stylish",
+    "lint-ts-fix": "tslint -c tslint.json -p . -t stylish --force --fix",
+    "watch": "(rm -rf dist/* || true) && tsc -w",
+    "test": "jest"
+  },
+  "dependencies": {
+    "typescript": "^3.3.3333"
+  },
+  "devDependencies": {
+    "@types/jest": "^24.0.11",
+    "@types/node": "^11.11.3",
+    "@types/typescript": "^2.0.0",
+    "jest": "^24.5.0",
+    "lint-staged": "^8.1.5",
+    "ts-jest": "^24.0.0",
+    "tslint": "^5.14.0",
+    "tslint-immutable": "^5.4.0"
+  },
+  "jest": {
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "**/*.{js,jsx,ts,tsx}",
+      "!**/coverage/**",
+      "!**/dist/**",
+      "!**/node_modules/**"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    },
+    "transform": {
+      "^.+\\.ts?$": "ts-jest"
+    },
+    "testRegex": "(/<rootDir>/src/.*|(\\.|/)spec)\\.ts$",
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json"
+    ]
+  },
+  "lint-staged": {
+    "src/**/*.{js,jsx,json,ts,tsx,css,scss}": [
+      "prettier --write",
+      "git add"
+    ]
+  }
+}
