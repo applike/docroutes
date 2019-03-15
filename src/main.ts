@@ -885,7 +885,7 @@ function compile(fileNames: string[], options: ts.CompilerOptions): void {
     }
     console.log(routers.map(printRouter).join("\n"));
     console.log(routers.map(printMarkdown).join("\n"));
-    ts.sys.writeFile("./test.md", routers.map(printMarkdown).join("\n"));
+    ts.sys.writeFile("./example.md", routers.map(printMarkdown).join("\n"));
 
     const allDiagnostics = ts
         .getPreEmitDiagnostics(program);
