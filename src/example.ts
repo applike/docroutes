@@ -1,41 +1,9 @@
-/**
- * A single task we aim to do (eventually).
- */
-interface ITodoItem {
-    /**
-     * The thing we want to do.
-     */
-    item: string;
-    /**
-     * Date this task was created at.
-     */
-    created: Date;
-    /**
-     * If we have a deadline, this is the deadline. Otherwise it is null.
-     */
-    due: Date | null;
-}
-
-/**
- * A server responds with a task containing the id, but a user does not have this id.
- */
-export interface ITodoItemWithKey extends ITodoItem {
-    /**
-     * The id of the entry in the database.
-     */
-    id: number;
-}
-
-export type TodoList = ITodoItem[];
-
-export interface ITodoState {
-    items: TodoList;
-}
+import { ITodoItem, ITodoItemWithKey, TodoList } from "./types/exampleTypes";
 
 /**
  * Routes for the TODO app.
  *
- * @ExportRoute("/")
+ * #ExportRoute("/")
  */
 export interface ITodoRoutes {
     /**
@@ -108,9 +76,11 @@ export interface ITodoRoutes {
         };
         "DELETE": {
             authorization: string;
-            204: undefined;
-            401: undefined;
-            404: undefined;
+            response: {
+                204: undefined;
+                401: undefined;
+                404: undefined;
+            }
         };
     };
     "/todo/list": {
