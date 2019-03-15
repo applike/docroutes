@@ -23,6 +23,9 @@ class RoutesFrontend {
         if ("unescapedText" in id && typeof id.unescapedText === "string") {
             return id.unescapedText;
         }
+        if ("text" in id && typeof id.text === "string") {
+            return id.text;
+        }
         if ("escapedText" in id && typeof id.escapedText === "string") {
             return id.escapedText;
         }
@@ -395,9 +398,26 @@ class RoutesFrontend {
                 this.setCurrentModule(oldModule);
                 return result;
             }
+            case ts.SyntaxKind.ExpressionWithTypeArguments: {
+                const ex = type as ts.ExpressionWithTypeArguments;
+                const identifier = RoutesFrontend.getIdentifierName(ex.expression as any);
+                const r = this.lookupIdentifier(identifier);
+                if (r !== null) {
+                    const oldModule = this.currentModule;
+                    const [newModule, newType] = r;
+                    this.setCurrentModule(newModule);
+                    const result = this.parseType(
+                        newType,
+                        name === null ? identifier : name,
+                    );
+                    this.setCurrentModule(oldModule);
+                    return result;
+                }
+                break;
+            }
             case ts.SyntaxKind.InterfaceDeclaration: {
-                const objectMembers: IObjectType["objectMembers"] = {};
-                const { members } = type as ts.InterfaceDeclaration;
+                let objectMembers: IObjectType["objectMembers"] = {};
+                const { heritageClauses, members } = type as ts.InterfaceDeclaration;
                 for (const member of members) {
                     if (member.name === undefined || member.kind !== ts.SyntaxKind.PropertySignature) {
                         continue;
@@ -408,6 +428,19 @@ class RoutesFrontend {
                         continue;
                     }
                     objectMembers[nameString] = this.parseType(memberType as ts.Node, null);
+                }
+                if (heritageClauses !== undefined) {
+                    for (const heritageClause of heritageClauses) {
+                        for (const parentType of heritageClause.types) {
+                            const parsedType = this.parseType(parentType, null);
+                            if ("objectMembers" in parsedType) {
+                                objectMembers = {
+                                    ...objectMembers,
+                                    ...parsedType.objectMembers,
+                                };
+                            }
+                        }
+                    }
                 }
                 return {
                     ...RoutesFrontend.getDocumentation(type),
@@ -585,7 +618,9 @@ class RoutesFrontend {
                             }
                             responses.push({
                                 ...RoutesFrontend.getDocumentation(responseMember),
-                                body: this.parseType(responseType),
+                                body: responseType.kind === ts.SyntaxKind.UndefinedKeyword
+                                    ? null
+                                    : this.parseType(responseType),
                                 status: responseCodeNumber,
                             });
                         }
