@@ -1,6 +1,6 @@
 import { stringify } from "circular-json";
 import * as ts from "typescript";
-import { printRouter } from "./printer";
+import { printMarkdown, printRouter } from "./printer";
 import { IDocumented, IExportedRoute, IExportedRouteMethod, IExportedRouter, IObjectType, Type } from "./types";
 
 // tslint:disable no-console member-ordering
@@ -849,6 +849,8 @@ function compile(fileNames: string[], options: ts.CompilerOptions): void {
         });
     }
     console.log(routers.map(printRouter).join("\n"));
+    console.log(routers.map(printMarkdown).join("\n"));
+    ts.sys.writeFile("./test.md", routers.map(printMarkdown).join("\n"));
 
     const allDiagnostics = ts
         .getPreEmitDiagnostics(program);

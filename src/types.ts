@@ -19,6 +19,7 @@ export interface IStringType extends INamedType {
 }
 
 export interface IEnumType extends IDocumented {
+    // TODO: keep this? we currently don't generate it!
     name: string;
     enumValues: {
         [name: string]: string;
