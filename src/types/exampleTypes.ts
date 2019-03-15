@@ -1,3 +1,9 @@
+export enum TaskStatus {
+    OPEN = "open",
+    STARTED = "started",
+    ON_HOLD = "onHold",
+}
+
 /**
  * A single task we aim to do (eventually).
  */
@@ -10,6 +16,10 @@ export interface ITodoItem {
      * Date this task was created at.
      */
     created: Date;
+    /**
+     * Whether we already made some progress on the task.
+     */
+    status: TaskStatus;
     /**
      * If we have a deadline, this is the deadline. Otherwise it is null.
      */
