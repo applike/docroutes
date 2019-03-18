@@ -116,7 +116,8 @@ class RoutesFrontend {
                     }
                     const importName = parseModuleSpecifier(moduleSpecifier);
                     if (resolvedImports[importName] === undefined) {
-                        throw new Error(`Failed to resolve import of ${importName} in ${sourceFile.fileName}`);
+                        // throw new Error(`Failed to resolve import of ${importName} in ${sourceFile.fileName}`);
+                        return;
                     }
                     const { namedBindings } = importClause;
                     switch (namedBindings.kind) {
@@ -508,7 +509,11 @@ class RoutesFrontend {
                 if (typeParameters !== undefined && typeParameters.length > 0) {
                     throw new Error("Type parameters not implemented");
                 }
-                return this.parseType(nextType, name !== null ? name : RoutesFrontend.getIdentifierName(aliasName));
+                const r = this.parseType(nextType, name !== null ? name : RoutesFrontend.getIdentifierName(aliasName));
+                if ("documentation" in r && r.documentation === null) {
+                    r.documentation = RoutesFrontend.getDocumentation(type).documentation;
+                }
+                return r;
             }
         }
         throw new Error(`Unhandled type ${stringify(type, undefined, 4)}`);
@@ -885,7 +890,7 @@ function compile(fileNames: string[], options: ts.CompilerOptions): void {
     }
     console.log(routers.map(printRouter).join("\n"));
     console.log(routers.map(printMarkdown).join("\n"));
-    ts.sys.writeFile("./example.md", routers.map(printMarkdown).join("\n"));
+    process.exit(0);
 
     const allDiagnostics = ts
         .getPreEmitDiagnostics(program);
