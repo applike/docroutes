@@ -4,6 +4,8 @@ This tool tries to solve the problem of keeping the documentation of your API in
 Instead of having a separate documentation you need to update every time you need to change something in your API, you document the routes in your codebase (you have documentation in your codebase, right?).
 You can then run the `docroutes` tool on your code base and generate one or more Markdown files containing not only your comments but also the types and interfaces your datatypes use.
 
+[![npm version](https://badge.fury.io/js/docroutes.svg)](https://badge.fury.io/js/docroutes)
+
 ## Usage
 
 ```shell
@@ -78,8 +80,8 @@ interface YourRoute {
 }
 ```
 
-There is another example in `src/example.ts`.
-An example for the output can be found in `example.md`, which is generated from `src/example.ts`.
+There is another example in [src/example.ts](https://github.com/applike/docroutes/blob/master/src/example.ts).
+An example for the output can be found in [example.md](https://github.com/applike/docroutes/blob/master/example.md), which is generated from [src/example.ts](https://github.com/applike/docroutes/blob/master/src/example.ts).
 
 Assume our current directory points to your custom typescript project.
 
