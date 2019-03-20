@@ -1,6 +1,27 @@
 {
-  "name": "routes",
+  "name": "docroutes",
   "version": "0.0.1",
+  "homepage": "",
+  "author": {
+    "name": "Anselm Jonas Scholl",
+    "url": "https://github.com/ajscholl"
+  },
+  "description": "A small tool to automatically extract documentation from typescript projects",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/applike/docroutes.git"
+  },
+  "keywords": [
+    "typescript",
+    "documentation",
+    "route",
+    "generation"
+  ],
+  "license": "BSD-3-Clause",
+  "bin": {
+    "docroutes": "./bin/docroutes"
+  },
+  "main": "./dist/index",
   "scripts": {
     "precommit": "lint-staged",
     "build": "npm run build-ts && npm run lint-ts",
@@ -9,7 +30,7 @@
     "lint-ts-check": "tslint -c tslint.json -p . -t stylish",
     "lint-ts-fix": "tslint -c tslint.json -p . -t stylish --force --fix",
     "watch": "(rm -rf dist/* || true) && tsc -w",
-    "test": "jest"
+    "test": "./bin/docroutes --config . --output example.md --checkUnchanged"
   },
   "dependencies": {
     "@types/circular-json": "^0.4.0",
@@ -17,40 +38,11 @@
     "typescript": "^3.3.3333"
   },
   "devDependencies": {
-    "@types/jest": "^24.0.11",
     "@types/node": "^11.11.3",
     "@types/typescript": "^2.0.0",
-    "jest": "^24.5.0",
     "lint-staged": "^8.1.5",
-    "ts-jest": "^24.0.0",
     "tslint": "^5.14.0",
     "tslint-immutable": "^5.4.0"
-  },
-  "jest": {
-    "collectCoverage": true,
-    "collectCoverageFrom": [
-      "**/*.{js,jsx,ts,tsx}",
-      "!**/coverage/**",
-      "!**/dist/**",
-      "!**/node_modules/**"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 100,
-        "functions": 100,
-        "lines": 100,
-        "statements": 100
-      }
-    },
-    "transform": {
-      "^.+\\.ts?$": "ts-jest"
-    },
-    "testRegex": "(/<rootDir>/src/.*|(\\.|/)spec)\\.ts$",
-    "moduleFileExtensions": [
-      "ts",
-      "js",
-      "json"
-    ]
   },
   "lint-staged": {
     "src/**/*.{js,jsx,json,ts,tsx,css,scss}": [

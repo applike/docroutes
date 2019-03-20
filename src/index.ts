@@ -935,24 +935,35 @@ function compile(cmdOpts: IOptions, options: ts.CompilerOptions): void {
     let changed = false;
     if (cmdOpts.outputFile !== null) {
         const txt = printMarkdownFull(routers);
-        changed = changed
-            || !ts.sys.fileExists(cmdOpts.outputFile)
-            || (txt !== ts.sys.readFile(cmdOpts.outputFile, "utf-8"));
+        if (cmdOpts.checkUnchanged && !changed) {
+            changed = !ts.sys.fileExists(cmdOpts.outputFile)
+                || (txt !== ts.sys.readFile(cmdOpts.outputFile, "utf-8"));
+            if (changed) {
+                console.info(`${cmdOpts.outputFile} changed`);
+            }
+        }
         ts.sys.writeFile(cmdOpts.outputFile, txt, false);
     }
     if (cmdOpts.outputDirectory !== null) {
         for (const router of routers) {
             const txt = printMarkdown(router, true);
             const fileName = path.join(cmdOpts.outputDirectory, router.name + ".md");
-            changed = changed
-                || !ts.sys.fileExists(fileName)
-                || (txt !== ts.sys.readFile(fileName, "utf-8"));
+            if (cmdOpts.checkUnchanged && !changed) {
+                changed = !ts.sys.fileExists(fileName)
+                    || (txt !== ts.sys.readFile(fileName, "utf-8"));
+                if (changed) {
+                    console.info(`${fileName} changed`);
+                }
+            }
             ts.sys.writeFile(fileName, txt);
         }
     }
-    if (cmdOpts.checkUnchanged && changed) {
-        console.error("Detected file changes");
-        process.exit(2);
+    if (cmdOpts.checkUnchanged) {
+        if (changed) {
+            console.error("Detected file changes");
+            process.exit(2);
+        }
+        console.info("No file changes detected");
     }
     process.exit(0);
 }
@@ -1006,6 +1017,9 @@ Any additional files or directories specified will be used as inputs to the type
             } else if (i + 1 < args.length) {
                 argMap[cleanName] = args[i + 1];
                 i++;
+            } else {
+                console.error("Missing second argument for", arg);
+                process.exit(1);
             }
             continue;
         }
