@@ -1,7 +1,7 @@
 {
   "name": "docroutes",
-  "version": "0.0.1",
-  "homepage": "",
+  "version": "0.0.2",
+  "homepage": "https://github.com/applike/docroutes.git",
   "author": {
     "name": "Anselm Jonas Scholl",
     "url": "https://github.com/ajscholl"
@@ -21,7 +21,8 @@
   "bin": {
     "docroutes": "./bin/docroutes"
   },
-  "main": "./dist/index",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "precommit": "lint-staged",
     "build": "npm run build-ts && npm run lint-ts",

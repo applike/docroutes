@@ -1107,22 +1107,24 @@ Any additional files or directories specified will be used as inputs to the type
     return result;
 }
 
-const opts = parseOptions(process.argv.slice(2));
-let tsConfig: ts.CompilerOptions = {
-    module: ts.ModuleKind.CommonJS,
-    noEmitOnError: true,
-    noImplicitAny: true,
-    target: ts.ScriptTarget.ES5,
-};
-if (opts.tsConfig !== null) {
-    const json = ts.parseJsonText(opts.tsConfig, ts.sys.readFile(opts.tsConfig) || "");
-    const config = ts.parseJsonSourceFileConfigFileContent(json, ts.sys, path.dirname(opts.tsConfig));
-    tsConfig = config.options;
-    opts.files = opts.files.concat(config.fileNames);
+export default function main() {
+    const opts = parseOptions(process.argv.slice(2));
+    let tsConfig: ts.CompilerOptions = {
+        module: ts.ModuleKind.CommonJS,
+        noEmitOnError: true,
+        noImplicitAny: true,
+        target: ts.ScriptTarget.ES5,
+    };
+    if (opts.tsConfig !== null) {
+        const json = ts.parseJsonText(opts.tsConfig, ts.sys.readFile(opts.tsConfig) || "");
+        const config = ts.parseJsonSourceFileConfigFileContent(json, ts.sys, path.dirname(opts.tsConfig));
+        tsConfig = config.options;
+        opts.files = opts.files.concat(config.fileNames);
+    }
+
+    // remove any duplicates
+    // (I know, this is O(n^2), but it should be fast enough)
+    opts.files = opts.files.filter((file, index) => opts.files.indexOf(file) === index);
+
+    compile(opts, tsConfig);
 }
-
-// remove any duplicates
-// (I know, this is O(n^2), but it should be fast enough)
-opts.files = opts.files.filter((file, index) => opts.files.indexOf(file) === index);
-
-compile(opts, tsConfig);

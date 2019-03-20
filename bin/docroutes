@@ -1,3 +1,10 @@
 #!/usr/bin/env node
 
-require("../dist/index.js");
+var docroutes;
+try {
+    docroutes = require("docroutes");
+} catch (e) {
+    docroutes = require("../dist/index.js");
+}
+
+docroutes.default();
