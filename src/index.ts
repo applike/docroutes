@@ -3,7 +3,16 @@ import * as fs from "fs";
 import * as path from "path";
 import * as ts from "typescript";
 import { printMarkdown, printMarkdownFull } from "./printer";
-import { IDocumented, IExportedRoute, IExportedRouteMethod, IExportedRouter, IObjectType, Type } from "./types";
+import TypeParseFailure from "./TypeParseFailure";
+import {
+    IDocumented,
+    IExportedRoute,
+    IExportedRouteMethod,
+    IExportedRouter,
+    IObjectType,
+    IStringType,
+    Type,
+} from "./types";
 
 // tslint:disable no-console member-ordering
 
@@ -96,10 +105,12 @@ class RoutesFrontend {
 
     private readonly program: ts.Program;
     private currentModule: string | null;
+    private currentSourceFile: ts.SourceFile | null;
     private imports: IImportMap;
     public constructor(program: ts.Program) {
         this.program = program;
         this.currentModule = null;
+        this.currentSourceFile = null;
         this.imports = {};
         this.prepareImports();
     }
@@ -167,11 +178,19 @@ class RoutesFrontend {
         this.imports[importingModule][importedAs] = [importedModule, originalName];
     }
 
-    public setCurrentModule(moduleName: string | null) {
+    public setCurrentModule(moduleName: string | null, sourceFile: ts.SourceFile | null) {
         this.currentModule = moduleName;
+        this.currentSourceFile = sourceFile;
     }
 
-    private lookupNode(moduleName: string, nodeName: string): [string, ts.Node] | null {
+    public getCurrentSourceFile(): ts.SourceFile {
+        if (this.currentSourceFile !== null) {
+            return this.currentSourceFile;
+        }
+        throw new Error("No source file set");
+    }
+
+    private lookupNode(moduleName: string, nodeName: string): [string, ts.SourceFile, ts.Node] | null {
         const nodePath: ts.Path = moduleName as ts.Path;
         const sourceFile: ts.SourceFile | undefined = this.program.getSourceFileByPath(nodePath);
         if (sourceFile === undefined) {
@@ -183,7 +202,7 @@ class RoutesFrontend {
                     const decl = stmt as ts.Node as ts.VariableDeclaration;
                     if (decl.name.kind === ts.SyntaxKind.Identifier &&
                         RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
@@ -192,7 +211,7 @@ class RoutesFrontend {
                     for (const decl of decls.declarations) {
                         if (decl.name.kind === ts.SyntaxKind.Identifier &&
                             RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                            return [moduleName, decl];
+                            return [moduleName, sourceFile, decl];
                         }
                     }
                     break;
@@ -200,42 +219,42 @@ class RoutesFrontend {
                 case ts.SyntaxKind.FunctionDeclaration: {
                     const decl = stmt as ts.FunctionDeclaration;
                     if (decl.name !== undefined && RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
                 case ts.SyntaxKind.ClassDeclaration: {
                     const decl = stmt as ts.ClassDeclaration;
                     if (decl.name !== undefined && RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
                 case ts.SyntaxKind.InterfaceDeclaration: {
                     const decl = stmt as ts.InterfaceDeclaration;
                     if (RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
                 case ts.SyntaxKind.TypeAliasDeclaration: {
                     const decl = stmt as ts.TypeAliasDeclaration;
                     if (RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
                 case ts.SyntaxKind.EnumDeclaration: {
                     const decl = stmt as ts.EnumDeclaration;
                     if (RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
                 case ts.SyntaxKind.NamespaceExportDeclaration: {
                     const decl = stmt as ts.NamespaceExportDeclaration;
                     if (RoutesFrontend.getIdentifierName(decl.name) === nodeName) {
-                        return [moduleName, decl];
+                        return [moduleName, sourceFile, decl];
                     }
                     break;
                 }
@@ -244,14 +263,14 @@ class RoutesFrontend {
         return null;
     }
 
-    public lookupIdentifierInCurrentModule(identifier: string): [string, ts.Node] | null {
+    public lookupIdentifierInCurrentModule(identifier: string): [string, ts.SourceFile, ts.Node] | null {
         if (this.currentModule === null) {
             return null;
         }
         return this.lookupNode(this.currentModule, identifier);
     }
 
-    public lookupIdentifier(identifier: string): [string, ts.Node] | null {
+    public lookupIdentifier(identifier: string): [string, ts.SourceFile, ts.Node] | null {
         if (this.currentModule === null) {
             return null;
         }
@@ -265,7 +284,7 @@ class RoutesFrontend {
         return this.lookupNode(targetModule, targetName);
     }
 
-    public lookupEntity(entity: ts.EntityName): [string, ts.Node] | null {
+    public lookupEntity(entity: ts.EntityName): [string, ts.SourceFile, ts.Node] | null {
         if (entity.kind === ts.SyntaxKind.Identifier) {
             const i = entity as ts.Identifier;
             return this.lookupIdentifier(RoutesFrontend.getIdentifierName(i));
@@ -275,7 +294,7 @@ class RoutesFrontend {
         if (left === null) {
             return null;
         }
-        const [newModule, baseType] = left;
+        const [newModule, newSourceFile, baseType] = left;
         const rightName = RoutesFrontend.getIdentifierName(q.right);
         switch (baseType.kind) {
             case ts.SyntaxKind.InterfaceDeclaration:
@@ -285,7 +304,7 @@ class RoutesFrontend {
                     if (member.name !== undefined &&
                         member.kind === ts.SyntaxKind.PropertySignature &&
                         RoutesFrontend.getMemberName(member as ts.PropertySignature) === rightName) {
-                        return [newModule, member];
+                        return [newModule, newSourceFile, member];
                     }
                 }
                 break;
@@ -296,7 +315,7 @@ class RoutesFrontend {
                     switch (property.kind) {
                         case ts.SyntaxKind.PropertyAssignment: {
                             if (RoutesFrontend.getMemberName(property as ts.PropertyAssignment) === rightName) {
-                                return [newModule, property];
+                                return [newModule, newSourceFile, property];
                             }
                             break;
                         }
@@ -304,20 +323,20 @@ class RoutesFrontend {
                             if (RoutesFrontend.getMemberName(
                                     property as ts.ShorthandPropertyAssignment,
                                 ) === rightName) {
-                                return [newModule, property];
+                                return [newModule, newSourceFile, property];
                             }
                             break;
                         }
                         case ts.SyntaxKind.MethodDeclaration: {
                             if (RoutesFrontend.getMemberName(property as ts.MethodDeclaration) === rightName) {
-                                return [newModule, property];
+                                return [newModule, newSourceFile, property];
                             }
                             break;
                         }
                         case ts.SyntaxKind.GetAccessor:
                         case ts.SyntaxKind.SetAccessor: {
                             if (RoutesFrontend.getMemberName(property as ts.AccessorDeclaration) === rightName) {
-                                return [newModule, property];
+                                return [newModule, newSourceFile, property];
                             }
                             break;
                         }
@@ -329,227 +348,327 @@ class RoutesFrontend {
         return null;
     }
 
-    private parseType(type: ts.Node, name: string | null = null): Type {
-        switch (type.kind) {
-            case ts.SyntaxKind.BooleanKeyword:
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    booleans: "all",
-                    name,
-                };
-            case ts.SyntaxKind.NumberKeyword:
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    numbers: "all",
-                };
-            case ts.SyntaxKind.StringKeyword:
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    strings: "all",
-                };
-            case ts.SyntaxKind.ObjectKeyword:
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    objectMembers: {},
-                };
-            case ts.SyntaxKind.NullKeyword:
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    null: true,
-                };
-            case ts.SyntaxKind.UndefinedKeyword:
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    undefined: true,
-                };
-            case ts.SyntaxKind.ArrayType: {
-                const array = type as ts.ArrayTypeNode;
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    arrayMembers: this.parseType(array.elementType, null),
-                    name,
-                };
-            }
-            case ts.SyntaxKind.LiteralType: {
-                const literal = type as ts.LiteralTypeNode;
-                switch (literal.literal.kind) {
-                    case ts.SyntaxKind.TrueKeyword:
-                    case ts.SyntaxKind.FalseKeyword:
-                        return {
-                            ...RoutesFrontend.getDocumentation(type),
-                            booleans: [literal.literal.kind === ts.SyntaxKind.TrueKeyword],
-                            name,
-                        };
-                    case ts.SyntaxKind.NumericLiteral: {
-                        const numLiteral = literal.literal as ts.NumericLiteral;
-                        return {
-                            ...RoutesFrontend.getDocumentation(type),
-                            name,
-                            numbers: [Number(numLiteral.text)],
-                        };
-                    }
-                    case ts.SyntaxKind.StringLiteral: {
-                        const numLiteral = literal.literal as ts.StringLiteral;
-                        return {
-                            ...RoutesFrontend.getDocumentation(type),
-                            name,
-                            strings: [numLiteral.text],
-                        };
-                    }
-                }
-                break;
-            }
-            case ts.SyntaxKind.TupleType: {
-                const tuple = type as ts.TupleTypeNode;
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    tupleMembers: tuple.elementTypes.map((member) =>
-                        this.parseType(member, null),
-                    ),
-                };
-            }
-            case ts.SyntaxKind.TypeReference: {
-                const ref = type as ts.TypeReferenceNode;
-                const r = this.lookupEntity(ref.typeName);
-                if (r === null) {
+    private performKeyOf(type: Type): IStringType {
+        if ("objectMembers" in type) {
+            return {
+                documentation: type.documentation,
+                name: type.name,
+                strings: Object.keys(type.objectMembers),
+            };
+        } else if ("intersection" in type) {
+            return {
+                documentation: type.documentation,
+                name: type.name,
+                strings: type.intersection.map((t) => this.performKeyOf(t).strings).reduce(
+                    (acc: IStringType["strings"], strings) => {
+                        if (strings === "all") {
+                            return acc;
+                        }
+                        if (acc === "all") {
+                            return strings;
+                        }
+                        return acc.filter((s) => strings.includes(s));
+                    }, "all"),
+            };
+        } else if ("union" in type) {
+            return {
+                documentation: type.documentation,
+                name: type.name,
+                strings: type.union.map((t) => this.performKeyOf(t).strings).reduce(
+                    (acc: IStringType["strings"], strings) => {
+                        if (strings === "all" || acc === "all") {
+                            return "all";
+                        }
+                        return acc.concat(strings.filter((s) => !acc.includes(s)));
+                    }, []),
+            };
+        } else {
+            throw new Error(`Failed to perform keyof on ${stringify(type)}`);
+        }
+    }
+
+    private parseType(type: ts.Node, name: string | null, isKeyof: boolean): Type {
+        try {
+            switch (type.kind) {
+                case ts.SyntaxKind.BooleanKeyword:
                     return {
                         ...RoutesFrontend.getDocumentation(type),
-                        name: RoutesFrontend.showEntityName(ref.typeName),
+                        booleans: "all",
+                        name,
+                    };
+                case ts.SyntaxKind.NumberKeyword:
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        numbers: "all",
+                    };
+                case ts.SyntaxKind.StringKeyword:
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        strings: "all",
+                    };
+                case ts.SyntaxKind.ObjectKeyword:
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
                         objectMembers: {},
                     };
+                case ts.SyntaxKind.NullKeyword:
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        null: true,
+                    };
+                case ts.SyntaxKind.UndefinedKeyword:
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        undefined: true,
+                    };
+                case ts.SyntaxKind.FunctionType: {
+                    if (isKeyof) {
+                        // We return an empty type to allow keyof to function correctly
+                        // (so you can take the key of functions, even if the functions
+                        // are not part of the object passed along the web API)
+                        return {
+                            documentation: null,
+                            intersection: [],
+                            name: null,
+                        };
+                    }
+                    throw TypeParseFailure.badType(type, this.getCurrentSourceFile());
                 }
-                const oldModule = this.currentModule;
-                const [newModule, newType] = r;
-                this.setCurrentModule(newModule);
-                const result = this.parseType(
-                    newType,
-                    name === null ? RoutesFrontend.showEntityName(ref.typeName) : name,
-                );
-                this.setCurrentModule(oldModule);
-                return result;
-            }
-            case ts.SyntaxKind.ExpressionWithTypeArguments: {
-                const ex = type as ts.ExpressionWithTypeArguments;
-                const identifier = RoutesFrontend.getIdentifierName(ex.expression as any);
-                const r = this.lookupIdentifier(identifier);
-                if (r !== null) {
+                case ts.SyntaxKind.ArrayType: {
+                    const array = type as ts.ArrayTypeNode;
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        arrayMembers: this.parseType(array.elementType, null, isKeyof),
+                        name,
+                    };
+                }
+                case ts.SyntaxKind.LiteralType: {
+                    const literal = type as ts.LiteralTypeNode;
+                    switch (literal.literal.kind) {
+                        case ts.SyntaxKind.TrueKeyword:
+                        case ts.SyntaxKind.FalseKeyword:
+                            return {
+                                ...RoutesFrontend.getDocumentation(type),
+                                booleans: [literal.literal.kind === ts.SyntaxKind.TrueKeyword],
+                                name,
+                            };
+                        case ts.SyntaxKind.NumericLiteral: {
+                            const numLiteral = literal.literal as ts.NumericLiteral;
+                            return {
+                                ...RoutesFrontend.getDocumentation(type),
+                                name,
+                                numbers: [Number(numLiteral.text)],
+                            };
+                        }
+                        case ts.SyntaxKind.StringLiteral: {
+                            const numLiteral = literal.literal as ts.StringLiteral;
+                            return {
+                                ...RoutesFrontend.getDocumentation(type),
+                                name,
+                                strings: [numLiteral.text],
+                            };
+                        }
+                    }
+                    break;
+                }
+                case ts.SyntaxKind.TupleType: {
+                    const tuple = type as ts.TupleTypeNode;
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        tupleMembers: tuple.elementTypes.map((member) =>
+                            this.parseType(member, null, isKeyof),
+                        ),
+                    };
+                }
+                case ts.SyntaxKind.TypeReference: {
+                    const ref = type as ts.TypeReferenceNode;
+                    const r = this.lookupEntity(ref.typeName);
+                    if (r === null) {
+                        return {
+                            ...RoutesFrontend.getDocumentation(type),
+                            name: RoutesFrontend.showEntityName(ref.typeName),
+                            objectMembers: {},
+                        };
+                    }
                     const oldModule = this.currentModule;
-                    const [newModule, newType] = r;
-                    this.setCurrentModule(newModule);
-                    const result = this.parseType(
-                        newType,
-                        name === null ? identifier : name,
-                    );
-                    this.setCurrentModule(oldModule);
-                    return result;
-                }
-                break;
-            }
-            case ts.SyntaxKind.InterfaceDeclaration: {
-                let objectMembers: IObjectType["objectMembers"] = {};
-                const { heritageClauses, members } = type as ts.InterfaceDeclaration;
-                for (const member of members) {
-                    if (member.name === undefined || member.kind !== ts.SyntaxKind.PropertySignature) {
-                        continue;
+                    const oldSourceFile = this.currentSourceFile;
+                    const [newModule, newSourceFile, newType] = r;
+                    this.setCurrentModule(newModule, newSourceFile);
+                    try {
+                        return this.parseType(
+                            newType,
+                            name === null ? RoutesFrontend.showEntityName(ref.typeName) : name,
+                            isKeyof,
+                        );
+                    } finally {
+                        this.setCurrentModule(oldModule, oldSourceFile);
                     }
-                    const { type: memberType } = member as ts.PropertySignature;
-                    const nameString: string | null = RoutesFrontend.getMemberName(member as ts.PropertySignature);
-                    if (nameString === null || type === undefined) {
-                        continue;
-                    }
-                    objectMembers[nameString] = this.parseType(memberType as ts.Node, null);
                 }
-                if (heritageClauses !== undefined) {
-                    for (const heritageClause of heritageClauses) {
-                        for (const parentType of heritageClause.types) {
-                            const parsedType = this.parseType(parentType, null);
-                            if ("objectMembers" in parsedType) {
-                                objectMembers = {
-                                    ...objectMembers,
-                                    ...parsedType.objectMembers,
-                                };
+                case ts.SyntaxKind.ExpressionWithTypeArguments: {
+                    const ex = type as ts.ExpressionWithTypeArguments;
+                    const identifier = RoutesFrontend.getIdentifierName(ex.expression as any);
+                    const r = this.lookupIdentifier(identifier);
+                    if (r !== null) {
+                        const oldModule = this.currentModule;
+                        const oldSourceFile = this.currentSourceFile;
+                        const [newModule, newSourceFile, newType] = r;
+                        this.setCurrentModule(newModule, newSourceFile);
+                        try {
+                            return this.parseType(
+                                newType,
+                                name === null ? identifier : name,
+                                isKeyof,
+                            );
+                        } finally {
+                            this.setCurrentModule(oldModule, oldSourceFile);
+                        }
+                    }
+                    break;
+                }
+                case ts.SyntaxKind.TypeOperator: {
+                    const { operator, type: innerType } = type as ts.TypeOperatorNode;
+                    if (operator === ts.SyntaxKind.KeyOfKeyword) {
+                        const parsedType = this.parseType(innerType, null, true);
+                        return {
+                            ...this.performKeyOf(parsedType),
+                            ...RoutesFrontend.getDocumentation(type),
+                            name,
+                        };
+                    }
+                    break;
+                }
+                case ts.SyntaxKind.TypeLiteral: {
+                    const objectMembers: IObjectType["objectMembers"] = {};
+                    const { members } = type as ts.TypeLiteralNode;
+                    for (const member of members) {
+                        if (member.name === undefined || member.kind !== ts.SyntaxKind.PropertySignature) {
+                            continue;
+                        }
+                        const { type: memberType } = member as ts.PropertySignature;
+                        const nameString: string | null = RoutesFrontend.getMemberName(member as ts.PropertySignature);
+                        if (nameString === null || type === undefined) {
+                            continue;
+                        }
+                        objectMembers[nameString] = this.parseType(memberType as ts.Node, null, isKeyof);
+                    }
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        objectMembers,
+                    };
+                }
+                case ts.SyntaxKind.InterfaceDeclaration: {
+                    let objectMembers: IObjectType["objectMembers"] = {};
+                    const { heritageClauses, members } = type as ts.InterfaceDeclaration;
+                    for (const member of members) {
+                        if (member.name === undefined || member.kind !== ts.SyntaxKind.PropertySignature) {
+                            continue;
+                        }
+                        const { type: memberType } = member as ts.PropertySignature;
+                        const nameString: string | null = RoutesFrontend.getMemberName(member as ts.PropertySignature);
+                        if (nameString === null || type === undefined) {
+                            continue;
+                        }
+                        objectMembers[nameString] = this.parseType(memberType as ts.Node, null, isKeyof);
+                    }
+                    if (heritageClauses !== undefined) {
+                        for (const heritageClause of heritageClauses) {
+                            for (const parentType of heritageClause.types) {
+                                const parsedType = this.parseType(parentType, null, isKeyof);
+                                if ("objectMembers" in parsedType) {
+                                    objectMembers = {
+                                        ...objectMembers,
+                                        ...parsedType.objectMembers,
+                                    };
+                                }
                             }
                         }
                     }
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        objectMembers,
+                    };
                 }
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    objectMembers,
-                };
-            }
-            case ts.SyntaxKind.EnumDeclaration: {
-                const union: Type[] = [];
-                const { members } = type as ts.EnumDeclaration;
-                let memberCounter = 0;
-                for (const member of members) {
-                    if (member.initializer !== undefined) {
-                        switch (member.initializer.kind) {
-                            case ts.SyntaxKind.NumericLiteral:
-                                union.push({
-                                    ...RoutesFrontend.getDocumentation(member),
-                                    name: null,
-                                    numbers: [parseInt((member.initializer as ts.NumericLiteral).text, 10)],
-                                });
-                                break;
-                            case ts.SyntaxKind.StringLiteral:
-                                union.push({
-                                    ...RoutesFrontend.getDocumentation(member),
-                                    name: null,
-                                    strings: [(member.initializer as ts.StringLiteral).text],
-                                });
-                                break;
-                            default:
-                                throw new Error("Unknown enum member kind");
+                case ts.SyntaxKind.EnumDeclaration: {
+                    const union: Type[] = [];
+                    const { members } = type as ts.EnumDeclaration;
+                    let memberCounter = 0;
+                    for (const member of members) {
+                        if (member.initializer !== undefined) {
+                            switch (member.initializer.kind) {
+                                case ts.SyntaxKind.NumericLiteral:
+                                    union.push({
+                                        ...RoutesFrontend.getDocumentation(member),
+                                        name: null,
+                                        numbers: [parseInt((member.initializer as ts.NumericLiteral).text, 10)],
+                                    });
+                                    break;
+                                case ts.SyntaxKind.StringLiteral:
+                                    union.push({
+                                        ...RoutesFrontend.getDocumentation(member),
+                                        name: null,
+                                        strings: [(member.initializer as ts.StringLiteral).text],
+                                    });
+                                    break;
+                                default:
+                                    throw new Error("Unknown enum member kind");
+                            }
+                        } else {
+                            union.push({
+                                ...RoutesFrontend.getDocumentation(member),
+                                name: null,
+                                numbers: [memberCounter],
+                            });
                         }
-                    } else {
-                        union.push({
-                            ...RoutesFrontend.getDocumentation(member),
-                            name: null,
-                            numbers: [memberCounter],
-                        });
+                        memberCounter++;
                     }
-                    memberCounter++;
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        union,
+                    };
                 }
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    union,
-                };
-            }
-            case ts.SyntaxKind.UnionType: {
-                const union = type as ts.UnionTypeNode;
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    name,
-                    union: union.types.map((subType) => this.parseType(subType, null)),
-                };
-            }
-            case ts.SyntaxKind.IntersectionType: {
-                const intersection = type as ts.IntersectionTypeNode;
-                return {
-                    ...RoutesFrontend.getDocumentation(type),
-                    intersection: intersection.types.map((subType) => this.parseType(subType, null)),
-                    name,
-                };
-            }
-            case ts.SyntaxKind.TypeAliasDeclaration: {
-                const { name: aliasName, type: nextType, typeParameters } = type as ts.TypeAliasDeclaration;
-                if (typeParameters !== undefined && typeParameters.length > 0) {
-                    throw new Error("Type parameters not implemented");
+                case ts.SyntaxKind.UnionType: {
+                    const union = type as ts.UnionTypeNode;
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        name,
+                        union: union.types.map((subType) => this.parseType(subType, null, isKeyof)),
+                    };
                 }
-                const r = this.parseType(nextType, name !== null ? name : RoutesFrontend.getIdentifierName(aliasName));
-                if ("documentation" in r && r.documentation === null) {
-                    r.documentation = RoutesFrontend.getDocumentation(type).documentation;
+                case ts.SyntaxKind.IntersectionType: {
+                    const intersection = type as ts.IntersectionTypeNode;
+                    return {
+                        ...RoutesFrontend.getDocumentation(type),
+                        intersection: intersection.types.map((subType) => this.parseType(subType, null, isKeyof)),
+                        name,
+                    };
                 }
-                return r;
+                case ts.SyntaxKind.TypeAliasDeclaration: {
+                    const { name: aliasName, type: nextType, typeParameters } = type as ts.TypeAliasDeclaration;
+                    if (typeParameters !== undefined && typeParameters.length > 0) {
+                        throw new Error("Type parameters not implemented");
+                    }
+                    const r = this.parseType(nextType, name !== null
+                        ? name
+                        : RoutesFrontend.getIdentifierName(aliasName),
+                        isKeyof,
+                    );
+                    if ("documentation" in r && r.documentation === null) {
+                        r.documentation = RoutesFrontend.getDocumentation(type).documentation;
+                    }
+                    return r;
+                }
             }
+        } catch (error) {
+            throw TypeParseFailure.withContext(error, type, this.getCurrentSourceFile());
         }
-        throw new Error(`Unhandled type ${stringify(type, undefined, 4)}`);
+        throw TypeParseFailure.unhandledType(type, this.getCurrentSourceFile());
     }
 
     private findMethodCallInfoOnMembers(members: ts.NodeArray<ts.TypeElement>): IMethodCallInfo {
@@ -574,17 +693,17 @@ class RoutesFrontend {
                 case "authorization":
                     result.authorization = {
                         ...RoutesFrontend.getDocumentation(member),
-                        type: this.parseType(type),
+                        type: this.parseType(type, null, false),
                     };
                     break;
                 case "body":
                     result.body = {
                         ...RoutesFrontend.getDocumentation(member),
-                        type: this.parseType(type),
+                        type: this.parseType(type, null, false),
                     };
                     break;
                 case "name": {
-                    const nameType = this.parseType(type);
+                    const nameType = this.parseType(type, null, false);
                     if ("strings" in nameType && nameType.strings !== "all") {
                         result.name = nameType.strings.join("");
                     }
@@ -609,7 +728,7 @@ class RoutesFrontend {
                             params.push({
                                 ...RoutesFrontend.getDocumentation(paramMember),
                                 name: paramName,
-                                type: this.parseType(paramType),
+                                type: this.parseType(paramType, null, false),
                             });
                         }
                     }
@@ -636,7 +755,7 @@ class RoutesFrontend {
                                 ...RoutesFrontend.getDocumentation(queryMember),
                                 name: queryName,
                                 required: questionToken === undefined,
-                                type: this.parseType(queryType),
+                                type: this.parseType(queryType, null, false),
                             });
                         }
                     }
@@ -666,7 +785,7 @@ class RoutesFrontend {
                                 ...RoutesFrontend.getDocumentation(responseMember),
                                 body: responseType.kind === ts.SyntaxKind.UndefinedKeyword
                                     ? null
-                                    : this.parseType(responseType),
+                                    : this.parseType(responseType, null, false),
                                 status: responseCodeNumber,
                             });
                         }
@@ -919,7 +1038,7 @@ function compile(cmdOpts: IOptions, options: ts.CompilerOptions): void {
         if (sourceFile === undefined) {
             continue;
         }
-        frontend.setCurrentModule(getSourceFilePath(sourceFile));
+        frontend.setCurrentModule(getSourceFilePath(sourceFile), sourceFile);
         sourceFile.forEachChild((node: ts.Node) => {
             const doc = RoutesFrontend.getDocumentation(node);
             const base = RoutesFrontend.getRouterBase(doc);
