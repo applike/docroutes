@@ -16,6 +16,7 @@ export interface ITodoRoutes {
         "POST": {
             authorization: string;
             body: ITodoItem;
+            name: "Create Task";
             response: {
                 /**
                  * The server might respond with the id of the task.
@@ -33,6 +34,7 @@ export interface ITodoRoutes {
      */
     "/todo/:id": {
         "GET": {
+            name: "Get task by ID";
             param: {
                 /**
                  * The id of the thing we request.
@@ -62,6 +64,7 @@ export interface ITodoRoutes {
         };
         "PUT": {
             authorization: string;
+            name: "Update task by ID";
             param: {
                 /**
                  * The id of the thing we request.
@@ -76,6 +79,7 @@ export interface ITodoRoutes {
         };
         "DELETE": {
             authorization: string;
+            name: "Delete task by ID";
             response: {
                 204: undefined;
                 401: undefined;
@@ -85,6 +89,7 @@ export interface ITodoRoutes {
     };
     "/todo/list": {
         "GET": {
+            name: "List all tasks";
             response: {
                 200: TodoList;
             };

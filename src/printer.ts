@@ -7,61 +7,73 @@ export function printRouter(router: IExportedRouter): string {
 
 const INDENT_SIZE = 2;
 
-export function printMarkdown(router: IExportedRouter): string {
+export function printMarkdownFull(routers: IExportedRouter[]): string {
+    return `# Routes
+
+[TOC]
+
+${routers.map((router) => printMarkdown(router, false)).join("\n")}
+`.trim() + "\n";
+}
+
+export function printMarkdown(router: IExportedRouter, printTOC: boolean): string {
     const routerDesc = router.documentation !== null
         ? `
 - ${router.documentation}`
         : "";
-    return `# ${router.name}
+    return `${printTOC ? "#" : "##"} ${router.name}
 
 - Prefix for all routes: \`${router.routeBase}\`${routerDesc}
-
-[TOC]
-
-${router.routes.map(printMarkdownEndpoint(router.routeBase)).join("\n\n")}`.replace(
+${printTOC ? "\n[TOC]\n" : ""}
+${router.routes.map(printMarkdownEndpoint(router.routeBase, printTOC ? 2 : 3)).join("\n\n")}`.replace(
         /\n{3,}/g, "\n\n",
-    ).split("\n").map((s) => s.trimRight()).join("\n");
+    ).split("\n").map((s) => s.trimRight()).join("\n").trim() + "\n";
 }
 
-function printMarkdownEndpoint(routerBase: string): (route: IExportedRoute) => string {
+function printMarkdownEndpoint(routerBase: string, level: 2 | 3): (route: IExportedRoute) => string {
     return (route: IExportedRoute) => {
-        const routeDesc = route.documentation !== null
-            ? `
-
-${route.documentation}`
-            : "";
-        return `## \`${path.join(routerBase, route.route)}\`${routeDesc}
-
-${route.methods.map(printMarkdownMethod).join("\n\n")}`;
+        const routeDesc = route.documentation !== null ? "\n\n" + route.documentation : "";
+        const routePath = `\`${path.join(routerBase, route.route)}\``;
+        return route.methods.map((method) => printMarkdownMethod(routePath, routeDesc, method, level)).join("\n\n");
     };
 }
 
-function printMarkdownMethod(method: IExportedRouteMethod): string {
-    return `### ${method.method}
-
-${method.documentation !== null ? `- ${method.documentation}` : ""}
-${method.authorization !== null ? `- Authorization: ${method.authorization.documentation || ""}
+function printMarkdownMethod(routePath: string, routeDesc: string, method: IExportedRouteMethod, level: 2 | 3): string {
+    const docs: string[] = [
+        `- Method: \`${method.method}\``,
+        `- Route: ${routePath}`,
+    ];
+    if (method.documentation !== null) {
+        docs.push(`- ${method.documentation}`);
+    }
+    if (method.authorization !== null) {
+        docs.push(`- Authorization: ${method.authorization.documentation || ""}
 
 ${indent(INDENT_SIZE)}\`\`\`ts
 ${printMarkdownType(method.authorization.type, INDENT_SIZE, false)}
 ${indent(INDENT_SIZE)}\`\`\`
-` : ""}
-
-${method.body !== null ? `- Body: ${method.body.documentation || ""}
+`);
+    }
+    if (method.body !== null) {
+        docs.push(`- Body: ${method.body.documentation || ""}
 
 ${indent(INDENT_SIZE)}\`\`\`ts
 ${printMarkdownType(method.body.type, INDENT_SIZE, false)}
 ${indent(INDENT_SIZE)}\`\`\`
-` : ""}
-${method.params.length > 0 ? `- Parameters:
+`);
+    }
+    if (method.params.length > 0) {
+        docs.push(`- Parameters:
 
 ${method.params.map((param) => `${indent(INDENT_SIZE)}- \`${param.name}\`: ${param.documentation || ""}
 
 ${indent(2 * INDENT_SIZE)}\`\`\`ts
 ${printMarkdownType(param.type, 2 * INDENT_SIZE, false)}
 ${indent(2 * INDENT_SIZE)}\`\`\`
-`)}` : ""}
-${method.query.length > 0 ? `- Query-Parameters:
+`)}`);
+    }
+    if (method.query.length > 0) {
+        docs.push(`- Query-Parameters:
 
 ${method.query.map((param) => `${indent(INDENT_SIZE)}- \`${param.name}\`${
     param.required ? "" : " (optional)"
@@ -70,8 +82,10 @@ ${method.query.map((param) => `${indent(INDENT_SIZE)}- \`${param.name}\`${
 ${indent(2 * INDENT_SIZE)}\`\`\`ts
 ${printMarkdownType(param.type, 2 * INDENT_SIZE, false)}
 ${indent(2 * INDENT_SIZE)}\`\`\`
-`)}` : ""}
-${method.responses.length > 0 ? `- Response:
+`)}`);
+    }
+    if (method.responses.length > 0) {
+        docs.push(`- Response:
 
 ${method.responses.map((response) => `${indent(INDENT_SIZE)}- \`${response.status}\`: ${response.documentation || ""}${
 response.body === null ? "Empty response" : `
@@ -80,7 +94,11 @@ ${indent(2 * INDENT_SIZE)}\`\`\`ts
 ${printMarkdownType(response.body, 2 * INDENT_SIZE, false)}
 ${indent(2 * INDENT_SIZE)}\`\`\`
 `}
-`).join("\n\n")}` : ""}`;
+`).join("\n\n")}`);
+    }
+    return `${level === 2 ? "##" : "###"} ${method.name}${routeDesc}
+
+${docs.join("\n")}`;
 }
 
 function printMarkdownType(type: Type, indention: number, isInline: boolean): string {

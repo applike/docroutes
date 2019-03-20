@@ -1,16 +1,18 @@
-# ITodoRoutes
+# Routes
+
+[TOC]
+
+## ITodoRoutes
 
 - Prefix for all routes: `/`
 - Routes for the TODO app.
 
-[TOC]
-
-## `/todo/create`
+### Create Task
 
 Create a new task.
 
-### POST
-
+- Method: `POST`
+- Route: `/todo/create`
 - We use POST here.
 - Authorization:
 
@@ -39,12 +41,12 @@ Create a new task.
 
   - `202`: But if the server queues the task for insertion, maybe we just get a confirmation of success.Empty response
 
-## `/todo/:id`
+### Get task by ID
 
 Request a task by id.
 
-### GET
-
+- Method: `GET`
+- Route: `/todo/:id`
 - Parameters:
 
   - `id`: The id of the thing we request.
@@ -79,8 +81,12 @@ Request a task by id.
 
   - `417`: The task was already due and thus could not be returned.Empty response
 
-### PUT
+### Update task by ID
 
+Request a task by id.
+
+- Method: `PUT`
+- Route: `/todo/:id`
 - Authorization:
 
   ```ts
@@ -112,8 +118,12 @@ Request a task by id.
 
   - `404`: Empty response
 
-### DELETE
+### Delete task by ID
 
+Request a task by id.
+
+- Method: `DELETE`
+- Route: `/todo/:id`
 - Authorization:
 
   ```ts
@@ -128,10 +138,10 @@ Request a task by id.
 
   - `404`: Empty response
 
-## `/todo/list`
+### List all tasks
 
-### GET
-
+- Method: `GET`
+- Route: `/todo/list`
 - Response:
 
   - `200`:
@@ -144,4 +154,3 @@ Request a task by id.
       due:     Date | null;
     } /* A single task we aim to do (eventually). */>
     ```
-

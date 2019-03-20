@@ -1,6 +1,8 @@
 import { stringify } from "circular-json";
+import * as fs from "fs";
+import * as path from "path";
 import * as ts from "typescript";
-import { printMarkdown, printRouter } from "./printer";
+import { printMarkdown, printMarkdownFull } from "./printer";
 import { IDocumented, IExportedRoute, IExportedRouteMethod, IExportedRouter, IObjectType, Type } from "./types";
 
 // tslint:disable no-console member-ordering
@@ -8,6 +10,7 @@ import { IDocumented, IExportedRoute, IExportedRouteMethod, IExportedRouter, IOb
 interface IMethodCallInfo {
     authorization: IExportedRouteMethod["authorization"];
     body: IExportedRouteMethod["body"];
+    name: IExportedRouteMethod["name"];
     params: IExportedRouteMethod["params"];
     query: IExportedRouteMethod["query"];
     responses: IExportedRouteMethod["responses"];
@@ -116,6 +119,7 @@ class RoutesFrontend {
                     }
                     const importName = parseModuleSpecifier(moduleSpecifier);
                     if (resolvedImports[importName] === undefined) {
+                        console.error(`Failed to resolve import of ${importName} in ${sourceFile.fileName}`);
                         // throw new Error(`Failed to resolve import of ${importName} in ${sourceFile.fileName}`);
                         return;
                     }
@@ -168,8 +172,8 @@ class RoutesFrontend {
     }
 
     private lookupNode(moduleName: string, nodeName: string): [string, ts.Node] | null {
-        const path: ts.Path = moduleName as ts.Path;
-        const sourceFile: ts.SourceFile | undefined = this.program.getSourceFileByPath(path);
+        const nodePath: ts.Path = moduleName as ts.Path;
+        const sourceFile: ts.SourceFile | undefined = this.program.getSourceFileByPath(nodePath);
         if (sourceFile === undefined) {
             return null;
         }
@@ -369,6 +373,35 @@ class RoutesFrontend {
                     name,
                 };
             }
+            case ts.SyntaxKind.LiteralType: {
+                const literal = type as ts.LiteralTypeNode;
+                switch (literal.literal.kind) {
+                    case ts.SyntaxKind.TrueKeyword:
+                    case ts.SyntaxKind.FalseKeyword:
+                        return {
+                            ...RoutesFrontend.getDocumentation(type),
+                            booleans: [literal.literal.kind === ts.SyntaxKind.TrueKeyword],
+                            name,
+                        };
+                    case ts.SyntaxKind.NumericLiteral: {
+                        const numLiteral = literal.literal as ts.NumericLiteral;
+                        return {
+                            ...RoutesFrontend.getDocumentation(type),
+                            name,
+                            numbers: [Number(numLiteral.text)],
+                        };
+                    }
+                    case ts.SyntaxKind.StringLiteral: {
+                        const numLiteral = literal.literal as ts.StringLiteral;
+                        return {
+                            ...RoutesFrontend.getDocumentation(type),
+                            name,
+                            strings: [numLiteral.text],
+                        };
+                    }
+                }
+                break;
+            }
             case ts.SyntaxKind.TupleType: {
                 const tuple = type as ts.TupleTypeNode;
                 return {
@@ -523,6 +556,7 @@ class RoutesFrontend {
         const result: IMethodCallInfo = {
             authorization: null,
             body: null,
+            name: "UNNAMED",
             params: [],
             query: [],
             responses: [],
@@ -549,6 +583,13 @@ class RoutesFrontend {
                         type: this.parseType(type),
                     };
                     break;
+                case "name": {
+                    const nameType = this.parseType(type);
+                    if ("strings" in nameType && nameType.strings !== "all") {
+                        result.name = nameType.strings.join("");
+                    }
+                    break;
+                }
                 case "param": {
                     const params: IExportedRouteMethod["params"] = [];
                     if (type.kind === ts.SyntaxKind.TypeLiteral) {
@@ -664,6 +705,7 @@ class RoutesFrontend {
                 return {
                     authorization: null,
                     body: null,
+                    name: "UNNAMED",
                     params: [],
                     query: [],
                     responses: [],
@@ -700,6 +742,7 @@ class RoutesFrontend {
             const {
                 authorization,
                 body,
+                name,
                 params,
                 query,
                 responses,
@@ -709,6 +752,7 @@ class RoutesFrontend {
                 authorization,
                 body,
                 method: this.methodFromNameString(nameString),
+                name,
                 params,
                 query,
                 responses,
@@ -866,11 +910,11 @@ function parseModuleSpecifier(s: ts.Expression): string {
     throw new Error(`Invalid module specifier kind ${s.kind}`);
 }
 
-function compile(fileNames: string[], options: ts.CompilerOptions): void {
-    const program = ts.createProgram(fileNames, options);
+function compile(cmdOpts: IOptions, options: ts.CompilerOptions): void {
+    const program = ts.createProgram(cmdOpts.files, options);
     const frontend = new RoutesFrontend(program);
     const routers: IExportedRouter[] = [];
-    for (const fileName of fileNames) {
+    for (const fileName of cmdOpts.files) {
         const sourceFile = program.getSourceFile(fileName);
         if (sourceFile === undefined) {
             continue;
@@ -888,36 +932,183 @@ function compile(fileNames: string[], options: ts.CompilerOptions): void {
             }
         });
     }
-    console.log(routers.map(printRouter).join("\n"));
-    console.log(routers.map(printMarkdown).join("\n"));
-    process.exit(0);
-
-    const allDiagnostics = ts
-        .getPreEmitDiagnostics(program);
-
-    allDiagnostics.forEach((diagnostic) => {
-        if (diagnostic.file) {
-            const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(
-                diagnostic.start!,
-            );
-            const message = ts.flattenDiagnosticMessageText(
-                diagnostic.messageText,
-                "\n",
-            );
-            console.log(
-                `${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`,
-            );
-        } else {
-            console.log(
-                `${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
-            );
+    let changed = false;
+    if (cmdOpts.outputFile !== null) {
+        const txt = printMarkdownFull(routers);
+        changed = changed
+            || !ts.sys.fileExists(cmdOpts.outputFile)
+            || (txt !== ts.sys.readFile(cmdOpts.outputFile, "utf-8"));
+        ts.sys.writeFile(cmdOpts.outputFile, txt, false);
+    }
+    if (cmdOpts.outputDirectory !== null) {
+        for (const router of routers) {
+            const txt = printMarkdown(router, true);
+            const fileName = path.join(cmdOpts.outputDirectory, router.name + ".md");
+            changed = changed
+                || !ts.sys.fileExists(fileName)
+                || (txt !== ts.sys.readFile(fileName, "utf-8"));
+            ts.sys.writeFile(fileName, txt);
         }
-    });
+    }
+    if (cmdOpts.checkUnchanged && changed) {
+        console.error("Detected file changes");
+        process.exit(2);
+    }
+    process.exit(0);
 }
 
-compile(process.argv.slice(2), {
+interface IOptions {
+    checkUnchanged: boolean;
+    files: string[];
+    tsConfig: string | null;
+    outputDirectory: string | null;
+    outputFile: string | null;
+}
+
+function findFilesInDir(dir: string): string[] {
+    const childs = ts.sys.getDirectories(dir).map((entry) => path.join(dir, entry));
+    const files = fs.readdirSync(dir).map((entry) =>
+        path.isAbsolute(entry) ? entry : path.join(dir, entry),
+    ).filter((entry) => ts.sys.fileExists(entry) && /\.tsx?$/.test(entry));
+    return files.concat(...childs.map(findFilesInDir));
+}
+
+function parseOptions(args: string[]): IOptions {
+    const argMap: {
+        [arg: string]: string;
+    } = {};
+    const files: string[] = [];
+    const directories: string[] = [];
+    const cwd = ts.sys.getCurrentDirectory();
+
+    if (args.includes("--help")) {
+        console.info(`Usage: docroutes [FLAGS] [FILES | DIRECTORIES]
+
+Options:
+    --help:                     Show this help
+    --outdir [DIR]:             Set the output directory
+    --output [FILE]:            Set a single output file (all output is concatenated)
+    --config [FILE | DIR]:      Specify the path to tsconfig.json
+    --checkUnchanged            Check whether any file changes were made and return failure if so.
+                                You can use this option to ensure files are up to date (e.g., in CI)
+
+Any additional files or directories specified will be used as inputs to the typescript compiler.
+`);
+        process.exit(1);
+    }
+    const singleArgs: string[] = ["checkUnchanged"];
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.slice(0, 2) === "--") {
+            const cleanName = arg.slice(2);
+            if (singleArgs.includes(cleanName)) {
+                argMap[cleanName] = "";
+            } else if (i + 1 < args.length) {
+                argMap[cleanName] = args[i + 1];
+                i++;
+            }
+            continue;
+        }
+        const fullPath = path.isAbsolute(arg) ? arg : path.join(cwd, arg);
+        if (ts.sys.directoryExists(fullPath)) {
+            directories.push(fullPath);
+        } else if (ts.sys.fileExists(fullPath)) {
+            files.push(fullPath);
+        } else {
+            console.error("No such file or directory:", arg);
+            process.exit(1);
+        }
+    }
+    const result: IOptions = {
+        checkUnchanged: false,
+        files: files.concat(...directories.map(findFilesInDir)),
+        outputDirectory: null,
+        outputFile: null,
+        tsConfig: null,
+    };
+    for (const switchName of Object.keys(argMap)) {
+        switch (switchName) {
+            case "checkUnchanged":
+                result.checkUnchanged = true;
+                break;
+            case "outdir": {
+                const arg = argMap[switchName];
+                const fullPath = path.isAbsolute(arg) ? arg : path.join(cwd, arg);
+                if (ts.sys.directoryExists(fullPath)) {
+                    result.outputDirectory = fullPath;
+                } else if (ts.sys.fileExists(fullPath)) {
+                    console.error("File exists, expected directory:", fullPath);
+                    process.exit(1);
+                } else {
+                    result.outputDirectory = fullPath;
+                    ts.sys.createDirectory(fullPath);
+                }
+                break;
+            }
+            case "output": {
+                const arg = argMap[switchName];
+                const fullPath = path.isAbsolute(arg) ? arg : path.join(cwd, arg);
+                if (ts.sys.directoryExists(fullPath)) {
+                    console.error("Directory exists, expected file:", fullPath);
+                    process.exit(1);
+                }
+                result.outputFile = fullPath;
+                break;
+            }
+            case "config": {
+                const arg = argMap[switchName];
+                const fullPath = path.isAbsolute(arg) ? arg : path.join(cwd, arg);
+                if (ts.sys.directoryExists(fullPath)) {
+                    const configPath = path.join(fullPath, "tsconfig.json");
+                    if (ts.sys.fileExists(configPath)) {
+                        result.tsConfig = configPath;
+                    } else if (ts.sys.directoryExists(configPath)) {
+                        console.error("Directory exists, expected file:", configPath);
+                        process.exit(1);
+                    } else {
+                        console.error("No such file:", configPath);
+                        process.exit(1);
+                    }
+                } else if (ts.sys.fileExists(fullPath)) {
+                    result.tsConfig = fullPath;
+                } else {
+                    console.error("No such file or directory:", fullPath);
+                    process.exit(1);
+                }
+                break;
+            }
+            default: {
+                console.error("Unhandled argument: --" + switchName);
+                process.exit(1);
+            }
+        }
+    }
+    if (result.outputDirectory === null && result.outputFile === null) {
+        console.warn("No output directory specified, I won't write any files!");
+    }
+    if (result.files.length === 0 && result.tsConfig === null) {
+        console.error("You did not specify any input files");
+        process.exit(1);
+    }
+    return result;
+}
+
+const opts = parseOptions(process.argv.slice(2));
+let tsConfig: ts.CompilerOptions = {
     module: ts.ModuleKind.CommonJS,
     noEmitOnError: true,
     noImplicitAny: true,
     target: ts.ScriptTarget.ES5,
-});
+};
+if (opts.tsConfig !== null) {
+    const json = ts.parseJsonText(opts.tsConfig, ts.sys.readFile(opts.tsConfig) || "");
+    const config = ts.parseJsonSourceFileConfigFileContent(json, ts.sys, path.dirname(opts.tsConfig));
+    tsConfig = config.options;
+    opts.files = opts.files.concat(config.fileNames);
+}
+
+// remove any duplicates
+// (I know, this is O(n^2), but it should be fast enough)
+opts.files = opts.files.filter((file, index) => opts.files.indexOf(file) === index);
+
+compile(opts, tsConfig);

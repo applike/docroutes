@@ -93,6 +93,7 @@ export interface IResponse extends IDocumented {
 }
 
 export interface IExportedRouteMethod extends IDocumented {
+    name: string;
     method: "GET" | "HEAD" | "POST" | "PUT" | "DELETE" | "CONNECT" | "OPTIONS" | "TRACE";
     authorization: IAuthroization | null;
     body: IBody | null;
