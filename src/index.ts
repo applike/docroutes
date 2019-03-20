@@ -548,12 +548,21 @@ class RoutesFrontend {
                         if (member.name === undefined || member.kind !== ts.SyntaxKind.PropertySignature) {
                             continue;
                         }
-                        const { type: memberType } = member as ts.PropertySignature;
+                        const { type: memberType, questionToken } = member as ts.PropertySignature;
                         const nameString: string | null = RoutesFrontend.getMemberName(member as ts.PropertySignature);
                         if (nameString === null || type === undefined) {
                             continue;
                         }
                         objectMembers[nameString] = this.parseType(memberType as ts.Node, null, isKeyof);
+                        if (questionToken !== undefined) {
+                            objectMembers[nameString] = {
+                                documentation: null,
+                                name: null,
+                                union: [objectMembers[nameString], {
+                                    undefined: true,
+                                }],
+                            };
+                        }
                     }
                     return {
                         ...RoutesFrontend.getDocumentation(type),
@@ -568,12 +577,21 @@ class RoutesFrontend {
                         if (member.name === undefined || member.kind !== ts.SyntaxKind.PropertySignature) {
                             continue;
                         }
-                        const { type: memberType } = member as ts.PropertySignature;
+                        const { type: memberType, questionToken } = member as ts.PropertySignature;
                         const nameString: string | null = RoutesFrontend.getMemberName(member as ts.PropertySignature);
                         if (nameString === null || type === undefined) {
                             continue;
                         }
                         objectMembers[nameString] = this.parseType(memberType as ts.Node, null, isKeyof);
+                        if (questionToken !== undefined) {
+                            objectMembers[nameString] = {
+                                documentation: null,
+                                name: null,
+                                union: [objectMembers[nameString], {
+                                    undefined: true,
+                                }],
+                            };
+                        }
                     }
                     if (heritageClauses !== undefined) {
                         for (const heritageClause of heritageClauses) {
