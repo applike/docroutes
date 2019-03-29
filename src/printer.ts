@@ -1,178 +1,222 @@
 import * as path from "path";
+import TextBlock from "./pretty/TextBlock";
 import { IDocumented, IExportedRoute, IExportedRouteMethod, IExportedRouter, Type } from "./types";
-
-export function printRouter(router: IExportedRouter): string {
-    return JSON.stringify(router, undefined, 4);
-}
 
 const INDENT_SIZE = 2;
 
 export function printMarkdownFull(routers: IExportedRouter[]): string {
-    return `# Routes
-
-[TOC]
-
-${routers.map((router) => printMarkdown(router, false)).join("\n")}
-`.trim() + "\n";
+    return new TextBlock([
+        "# Routes",
+        "",
+        "[TOC]",
+        "",
+    ]).vcat(...routers.map((router) => printMarkdown(router, false))).toString().trim() + "\n";
 }
 
 export function printMarkdown(router: IExportedRouter, printTOC: boolean): string {
     const routerDesc = router.documentation !== null
-        ? `
-- ${router.documentation}`
-        : "";
-    return `${printTOC ? "#" : "##"} ${router.name}
-
-- Prefix for all routes: \`${router.routeBase}\`${routerDesc}
-${printTOC ? "\n[TOC]\n" : ""}
-${router.routes.map(printMarkdownEndpoint(router.routeBase, printTOC ? 2 : 3)).join("\n\n")}`.replace(
+        ? TextBlock.hcat("- ", router.documentation)
+        : TextBlock.EMPTY;
+    return TextBlock.vcat(
+        `${printTOC ? "#" : "##"} ${router.name}`,
+        "",
+        TextBlock.hcat("- Prefix for all routes: `", router.routeBase, "`"),
+        routerDesc,
+        printTOC ? "\n[TOC]\n" : "",
+        TextBlock.vJoin(router.routes.map(printMarkdownEndpoint(router.routeBase, printTOC ? 2 : 3)), "\n\n"),
+    ).toString()
+    .split("\n").map((s) => s.trimRight()).join("\n")
+    .replace(
         /\n{3,}/g, "\n\n",
-    ).split("\n").map((s) => s.trimRight()).join("\n").trim() + "\n";
+    ).trim() + "\n";
 }
 
-function printMarkdownEndpoint(routerBase: string, level: 2 | 3): (route: IExportedRoute) => string {
+function printMarkdownEndpoint(routerBase: string, level: 2 | 3): (route: IExportedRoute) => TextBlock {
     return (route: IExportedRoute) => {
-        const routeDesc = route.documentation !== null ? "\n\n" + route.documentation : "";
-        const routePath = `\`${path.join(routerBase, route.route)}\``;
-        return route.methods.map((method) => printMarkdownMethod(routePath, routeDesc, method, level)).join("\n\n");
+        const routeDesc = route.documentation !== null
+            ? TextBlock.hcat("- ", route.documentation)
+            : TextBlock.EMPTY;
+        const routePath = TextBlock.hcat("`", path.join(routerBase, route.route), "`");
+        return TextBlock.vJoin(route.methods.map(
+            (method) => printMarkdownMethod(routePath, routeDesc, method, level),
+        ), "\n\n");
     };
 }
 
-function printMarkdownMethod(routePath: string, routeDesc: string, method: IExportedRouteMethod, level: 2 | 3): string {
-    const docs: string[] = [
-        `- Method: \`${method.method}\``,
-        `- Route: ${routePath}`,
+function printMarkdownMethod(
+    routePath: TextBlock,
+    routeDesc: TextBlock,
+    method: IExportedRouteMethod,
+    level: 2 | 3,
+): TextBlock {
+    const docs: TextBlock[] = [
+        TextBlock.hcat("- Method: `", method.method, "`"),
+        TextBlock.hcat("- Route: ", routePath),
     ];
     if (method.documentation !== null) {
-        docs.push(`- ${method.documentation}`);
+        docs.push(TextBlock.hcat("- ", method.documentation));
     }
     if (method.authorization !== null) {
-        docs.push(`- Authorization: ${method.authorization.documentation || ""}
-
-${indent(INDENT_SIZE)}\`\`\`ts
-${printMarkdownType(method.authorization.type, INDENT_SIZE, false)}
-${indent(INDENT_SIZE)}\`\`\`
-`);
+        docs.push(TextBlock.vcat(
+            TextBlock.hcat("- Authorization: ", method.authorization.documentation || ""),
+            "",
+            TextBlock.vcat(
+                "```ts",
+                printMarkdownType(method.authorization.type),
+                "```",
+            ).indent(INDENT_SIZE),
+            "",
+        ));
     }
     if (method.body !== null) {
-        docs.push(`- Body: ${method.body.documentation || ""}
-
-${indent(INDENT_SIZE)}\`\`\`ts
-${printMarkdownType(method.body.type, INDENT_SIZE, false)}
-${indent(INDENT_SIZE)}\`\`\`
-`);
+        docs.push(TextBlock.vcat(
+            TextBlock.hcat("- Body: ", method.body.documentation || ""),
+            "",
+            TextBlock.vcat(
+                "```ts",
+                printMarkdownType(method.body.type),
+                "```",
+            ).indent(INDENT_SIZE),
+            "",
+        ));
     }
     if (method.params.length > 0) {
-        docs.push(`- Parameters:
-
-${method.params.map((param) => `${indent(INDENT_SIZE)}- \`${param.name}\`: ${param.documentation || ""}
-
-${indent(2 * INDENT_SIZE)}\`\`\`ts
-${printMarkdownType(param.type, 2 * INDENT_SIZE, false)}
-${indent(2 * INDENT_SIZE)}\`\`\`
-`)}`);
+        docs.push(TextBlock.vcat(
+            "- Parameters:",
+            "",
+            ...method.params.map((param) => TextBlock.vcat(
+                TextBlock.hcat("- `", param.name, "`: ", param.documentation || ""),
+                "",
+                TextBlock.vcat(
+                    "```ts",
+                    printMarkdownType(param.type),
+                    "```",
+                ).indent(INDENT_SIZE),
+                "",
+            ).indent(INDENT_SIZE)),
+        ));
     }
     if (method.query.length > 0) {
-        docs.push(`- Query-Parameters:
-
-${method.query.map((param) => `${indent(INDENT_SIZE)}- \`${param.name}\`${
-    param.required ? "" : " (optional)"
-}: ${param.documentation || ""}
-
-${indent(2 * INDENT_SIZE)}\`\`\`ts
-${printMarkdownType(param.type, 2 * INDENT_SIZE, false)}
-${indent(2 * INDENT_SIZE)}\`\`\`
-`)}`);
+        docs.push(TextBlock.vcat(
+            "- Query-Parameters:",
+            "",
+            ...method.query.map((param) => TextBlock.vcat(
+                TextBlock.hcat(
+                    "- `",
+                    param.name,
+                    "`",
+                    param.required ? "" : " (optional)",
+                    ": ",
+                    param.documentation || ""),
+                "",
+                TextBlock.vcat(
+                    "```ts",
+                    printMarkdownType(param.type),
+                    "```",
+                ).indent(INDENT_SIZE),
+                "",
+            ).indent(INDENT_SIZE)),
+        ));
     }
     if (method.responses.length > 0) {
-        docs.push(`- Response:
-
-${method.responses.map((response) => `${indent(INDENT_SIZE)}- \`${response.status}\`: ${response.documentation || ""}${
-response.body === null ? "Empty response" : `
-
-${indent(2 * INDENT_SIZE)}\`\`\`ts
-${printMarkdownType(response.body, 2 * INDENT_SIZE, false)}
-${indent(2 * INDENT_SIZE)}\`\`\`
-`}
-`).join("\n\n")}`);
+        docs.push(TextBlock.vcat(
+            "- Response:",
+            "",
+            ...method.responses.map((response) => TextBlock.vcat(
+                TextBlock.hcat(
+                    "- `",
+                    response.status.toString(),
+                    "`: ",
+                    response.documentation || ""),
+                "",
+                response.body === null
+                    ? new TextBlock("Empty response").indent(INDENT_SIZE)
+                    : TextBlock.vcat(
+                        "",
+                        "```ts",
+                        printMarkdownType(response.body),
+                        "```",
+                    ).indent(INDENT_SIZE),
+                "",
+            ).indent(INDENT_SIZE)),
+        ));
     }
-    return `${level === 2 ? "##" : "###"} ${method.name}${routeDesc}
-
-${docs.join("\n")}`;
+    return TextBlock.vcat(
+        TextBlock.hcat(
+            level === 2 ? "##" : "###",
+            " ",
+            method.name,
+        ),
+        "",
+        routeDesc,
+        ...docs,
+    );
 }
 
-function printMarkdownType(type: Type, indention: number, isInline: boolean): string {
+function printMarkdownType(type: Type): TextBlock {
     if ("numbers" in type) {
         if (type.numbers === "all") {
-            return `${indent(indention, isInline)}number${showDocType(type)}`;
+            return TextBlock.hcat("number", showDocType(type));
         }
-        return `${indent(indention, isInline)}${type.numbers.join(" | ")}${showDocType(type)}`;
+        return TextBlock.hcat(type.numbers.join(" | "), showDocType(type));
     }
     if ("booleans" in type) {
         if (type.booleans === "all") {
-            return `${indent(indention, isInline)}boolean${showDocType(type)}`;
+            return TextBlock.hcat("boolean", showDocType(type));
         }
-        return `${indent(indention, isInline)}${type.booleans.join(" | ")}${showDocType(type)}`;
+        return TextBlock.hcat(type.booleans.join(" | "), showDocType(type));
     }
     if ("strings" in type) {
         if (type.strings === "all") {
-            return `${indent(indention, isInline)}string${showDocType(type)}`;
+            return TextBlock.hcat("string", showDocType(type));
         }
-        return `${indent(indention, isInline)}${type.strings.map((s) =>
-            JSON.stringify(s),
-        ).join(" | ")}${showDocType(type)}`;
+        return TextBlock.hcat(type.strings.map((s) => JSON.stringify(s)).join(" | "), showDocType(type));
     }
     if ("arrayMembers" in type) {
         if (isSimpleType(type.arrayMembers)) {
-            return `${indent(indention, isInline)}${
-                printMarkdownType(type.arrayMembers, indention, true)
-            }[]${showDocType(type)}`;
+            return TextBlock.hcat(printMarkdownType(type.arrayMembers), "[]", showDocType(type));
         }
-        return `${indent(indention, isInline)}Array<${
-            printMarkdownType(type.arrayMembers, indention, true)
-        }>${showDocType(type)}`;
+        return new TextBlock("Array<" + printMarkdownType(type.arrayMembers) + ">").hcat(showDocType(type));
     }
     if ("tupleMembers" in type) {
-        return `${indent(indention, isInline)}[${
-            type.tupleMembers.map((member) => printMarkdownType(member, indention, true)).join(", ")
-        }]${showDocType(type)}`;
+        return new TextBlock("[" + type.tupleMembers.map(printMarkdownType).join(", ") + "]").hcat(showDocType(type));
     }
     if ("objectMembers" in type) {
         const memberKeys = Object.keys(type.objectMembers);
         if (memberKeys.length === 0) {
             if (type.name === null) {
-                return `${indent(indention, isInline)}{}${showDocType(type)}`;
+                return TextBlock.hcat("{}", showDocType(type));
             }
             // we have a type we only know by name
-            return `${indent(indention, isInline)}${type.name}${showDocType(type)}`;
+            return TextBlock.hcat(type.name, showDocType(type));
         }
         const longestName = memberKeys.reduce((acc, key) => Math.max(acc, key.length), 0);
-        return `${indent(indention, isInline)}{${
-            memberKeys.map((memberName) => `
-${indent(indention + INDENT_SIZE)}${memberName}:${indent(longestName - memberName.length)} ${
-    printMarkdownType(type.objectMembers[memberName], indention + INDENT_SIZE, true)
-};`,
-            ).join("")
-        }
-${indent(indention, false)}}${showDocType(type)}`;
+        return TextBlock.vcat(
+            "{",
+            ...memberKeys.map((memberName) =>
+                TextBlock.hcat(
+                    memberName,
+                    ": ",
+                    printMarkdownType(type.objectMembers[memberName]).indent(longestName - memberName.length),
+                    ";",
+                ).indent(INDENT_SIZE),
+            ),
+            TextBlock.hcat("}", showDocType(type)),
+        );
     }
     if ("null" in type) {
-        return `${indent(indention, isInline)}null`;
+        return new TextBlock("null");
     }
     if ("undefined" in type) {
-        return `${indent(indention, isInline)}undefined`;
+        return new TextBlock("undefined");
     }
     if ("intersection" in type) {
-        return `${indent(indention, isInline)}${
-            type.intersection.map((member) => printMarkdownType(member, indention, true)).join(" & ")
-        }${showDocType(type)}`;
+        return TextBlock.hcat(type.intersection.map(printMarkdownType).join(" & "), showDocType(type));
     }
     if ("union" in type) {
-        return `${indent(indention, isInline)}${
-            type.union.map((member) => printMarkdownType(member, indention, true)).join(" | ")
-        }${showDocType(type)}`;
+        return TextBlock.hcat(type.union.map(printMarkdownType).join(" | "), showDocType(type));
     }
-    return "";
+    return TextBlock.EMPTY;
 }
 
 function isSimpleType(type: Type): boolean {
@@ -209,16 +253,15 @@ function isSimpleType(type: Type): boolean {
     return false;
 }
 
-function showDocType(doc: IDocumented): string {
+function showDocType(doc: IDocumented): TextBlock {
     if (doc.documentation === null) {
-        return "";
+        return TextBlock.EMPTY;
     }
-    return ` /* ${doc.documentation} */`;
-}
-
-function indent(amount: number, isInline: boolean = false): string {
-    if (isInline) {
-        return "";
+    const docBlock = new TextBlock(doc.documentation);
+    const endLines = [];
+    while (endLines.length < docBlock.height()) {
+        endLines.push(endLines.length + 1 < docBlock.height() ? "" : " */");
     }
-    return [...new Array(amount)].map(() => " ").join("");
+    const endBlock = new TextBlock(endLines);
+    return TextBlock.hcat(" /* ", docBlock, endBlock);
 }

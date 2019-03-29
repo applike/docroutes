@@ -9,8 +9,7 @@
 
 ### Create Task
 
-Create a new task.
-
+- Create a new task.
 - Method: `POST`
 - Route: `/todo/create`
 - We use POST here.
@@ -39,12 +38,13 @@ Create a new task.
     number
     ```
 
-  - `202`: But if the server queues the task for insertion, maybe we just get a confirmation of success.Empty response
+  - `202`: But if the server queues the task for insertion, maybe we just get a confirmation of success.
+
+    Empty response
 
 ### Get task by ID
 
-Request a task by id.
-
+- Request a task by id.
 - Method: `GET`
 - Route: `/todo/:id`
 - Parameters:
@@ -77,14 +77,17 @@ Request a task by id.
     } /* A server responds with a task containing the id, but a user does not have this id. */
     ```
 
-  - `404`: The server does not know this task.Empty response
+  - `404`: The server does not know this task.
 
-  - `417`: The task was already due and thus could not be returned.Empty response
+    Empty response
+
+  - `417`: The task was already due and thus could not be returned.
+
+    Empty response
 
 ### Update task by ID
 
-Request a task by id.
-
+- Request a task by id.
 - Method: `PUT`
 - Route: `/todo/:id`
 - Authorization:
@@ -114,14 +117,17 @@ Request a task by id.
 
 - Response:
 
-  - `204`: Empty response
+  - `204`:
 
-  - `404`: Empty response
+    Empty response
+
+  - `404`:
+
+    Empty response
 
 ### Delete task by ID
 
-Request a task by id.
-
+- Request a task by id.
 - Method: `DELETE`
 - Route: `/todo/:id`
 - Authorization:
@@ -132,11 +138,17 @@ Request a task by id.
 
 - Response:
 
-  - `204`: Empty response
+  - `204`:
 
-  - `401`: Empty response
+    Empty response
 
-  - `404`: Empty response
+  - `401`:
+
+    Empty response
+
+  - `404`:
+
+    Empty response
 
 ### List all tasks
 
