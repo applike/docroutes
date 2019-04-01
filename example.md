@@ -25,7 +25,9 @@
   {
     item:    string;
     created: Date;
-    status:  "open" | "started" | "onHold";
+    status:  "open" | "started" | "onHold" /* Current status of a task.
+
+                                              No finished status is provided as finished tasks are expected to be deleted. */;
     due:     Date | null;
   } /* A single task we aim to do (eventually). */
   ```
@@ -63,6 +65,12 @@
     boolean
     ```
 
+  - `someSecondParam` (optional): Testing rendering of multiple query parameters.
+
+    ```ts
+    number
+    ```
+
 - Response:
 
   - `200`: The task we wanted.
@@ -72,7 +80,9 @@
       id:      number;
       item:    string;
       created: Date;
-      status:  "open" | "started" | "onHold";
+      status:  "open" | "started" | "onHold" /* Current status of a task.
+
+                                                No finished status is provided as finished tasks are expected to be deleted. */;
       due:     Date | null;
     } /* A server responds with a task containing the id, but a user does not have this id. */
     ```
@@ -102,7 +112,9 @@
   {
     item:    string;
     created: Date;
-    status:  "open" | "started" | "onHold";
+    status:  "open" | "started" | "onHold" /* Current status of a task.
+
+                                              No finished status is provided as finished tasks are expected to be deleted. */;
     due:     Date | null;
   } /* A single task we aim to do (eventually). */
   ```
@@ -162,7 +174,9 @@
     Array<{
       item:    string;
       created: Date;
-      status:  "open" | "started" | "onHold";
+      status:  "open" | "started" | "onHold" /* Current status of a task.
+
+                                                No finished status is provided as finished tasks are expected to be deleted. */;
       due:     Date | null;
     } /* A single task we aim to do (eventually). */>
     ```

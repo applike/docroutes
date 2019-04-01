@@ -46,6 +46,10 @@ export interface ITodoRoutes {
                  * Only return the result if it is not due already.
                  */
                 ifNotDue?: boolean;
+                /**
+                 * Testing rendering of multiple query parameters.
+                 */
+                someSecondParam?: number;
             }
             response: {
                 /**

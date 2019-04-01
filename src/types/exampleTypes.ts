@@ -1,3 +1,8 @@
+/**
+ * Current status of a task.
+ *
+ * No finished status is provided as finished tasks are expected to be deleted.
+ */
 export enum TaskStatus {
     OPEN = "open",
     STARTED = "started",

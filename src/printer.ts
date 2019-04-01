@@ -193,14 +193,18 @@ function printMarkdownType(type: Type): TextBlock {
         const longestName = memberKeys.reduce((acc, key) => Math.max(acc, key.length), 0);
         return TextBlock.vcat(
             "{",
-            ...memberKeys.map((memberName) =>
-                TextBlock.hcat(
+            ...memberKeys.map((memberName) => {
+                const memberBlock = TextBlock.hcat(
                     memberName,
                     ": ",
                     printMarkdownType(type.objectMembers[memberName]).indent(longestName - memberName.length),
-                    ";",
-                ).indent(INDENT_SIZE),
-            ),
+                );
+                let semicolon = ";";
+                while (semicolon.length < memberBlock.height()) {
+                    semicolon = "\n" + semicolon;
+                }
+                return memberBlock.hcat(semicolon).indent(INDENT_SIZE);
+            }),
             TextBlock.hcat("}", showDocType(type)),
         );
     }
